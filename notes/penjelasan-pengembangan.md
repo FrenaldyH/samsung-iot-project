@@ -1,7 +1,7 @@
 # Penjelasan Pengembangan: Serial, MQTT, Dashboard, dan Pengujian
 
 > Lanjutan dari [pemahaman-proyek.md](pemahaman-proyek.md). Dokumen ini menjelaskan **apa yang ditambahkan, kenapa, dan cara menjalankannya**.
-> Simulasi Wokwi dan koneksi HiveMQ Cloud **belum pernah dijalankan** saat dokumen ini ditulis, karena butuh akun dan kredensial tim. Yang sudah diverifikasi dijelaskan di bagian 9.
+> Simulasi Wokwi dan koneksi ke broker EMQX Serverless **belum pernah dijalankan** saat dokumen ini ditulis, karena butuh akun dan kredensial tim. Yang sudah diverifikasi dijelaskan di bagian 9.
 
 ---
 
@@ -38,7 +38,7 @@ Serial adalah **syarat minimum brief**. Sebelumnya, kode sama sekali tidak memak
 |---|---|
 | `[BOOT] Sistem deteksi kebocoran gas` | ESP32 menyala |
 | `[WIFI] Menghubungkan ke Wokwi-GUEST` lalu `[WIFI] Terhubung` / `[WIFI] Gagal, ...` | Saat menyambung WiFi (maksimal 10 detik) |
-| `[MQTT] Terhubung ke broker` / `[MQTT] Gagal terhubung, kode=...` | Saat menyambung ke HiveMQ |
+| `[MQTT] Terhubung ke broker` / `[MQTT] Gagal terhubung, kode=...` | Saat menyambung ke broker EMQX |
 | `[SIAP] Memantau gas...` | Setup selesai |
 | `[ALARM] Kebocoran gas terdeteksi, raw=...` | Gas terdeteksi, alarm mulai terkunci |
 | `[MOTOR] Sampai posisi 200 langkah` | Stepper selesai bergerak |
@@ -53,11 +53,11 @@ Arti `kode=` pada pesan MQTT gagal (dari library PubSubClient): `-2` berarti ser
 
 **MQTT** adalah cara perangkat IoT bertukar pesan, mirip grup WhatsApp. Pengirim (**publisher**) menaruh pesan di sebuah **topic** (nama grup), dan siapa pun yang **subscribe** ke topic itu menerimanya. Di proyek ini, ESP32 adalah publisher dan dashboard Colab adalah subscriber.
 
-**Broker** adalah perantara yang menerima dan meneruskan pesan. Broker diperlukan karena ESP32 dan laptop tidak bisa saling terhubung langsung lewat internet (terhalang router/firewall). Jadi keduanya sama-sama menghubungi broker dari sisi masing-masing. **HiveMQ Cloud** adalah broker yang sudah di-hosting, jadi tim tidak perlu menyiapkan server sendiri.
+**Broker** adalah perantara yang menerima dan meneruskan pesan. Broker diperlukan karena ESP32 dan laptop tidak bisa saling terhubung langsung lewat internet (terhalang router/firewall). Jadi keduanya sama-sama menghubungi broker dari sisi masing-masing. **EMQX Serverless** adalah broker yang sudah di-hosting dan gratis, jadi tim tidak perlu menyiapkan server sendiri (alasan tidak memakai HiveMQ Cloud ada di bagian 6).
 
-**TLS dan port 8883.** Port adalah "nomor pintu" di server. MQTT biasa memakai pintu 1883 dengan pesan terbuka (seperti HTTP). MQTT dengan **TLS** memakai pintu **8883**, dan pesannya dienkripsi (seperti HTTPS, gembok di browser). HiveMQ Cloud memakai TLS, jadi ESP32 memakai `WiFiClientSecure`, bukan `WiFiClient` biasa.
+**TLS dan port 8883.** Port adalah "nomor pintu" di server. MQTT biasa memakai pintu 1883 dengan pesan terbuka (seperti HTTP). MQTT dengan **TLS** memakai pintu **8883**, dan pesannya dienkripsi (seperti HTTPS, gembok di browser). EMQX Serverless memakai TLS, jadi ESP32 memakai `WiFiClientSecure`, bukan `WiFiClient` biasa.
 
-**`setInsecure()`, sebuah trade-off yang disengaja.** TLS punya dua fungsi: (1) mengenkripsi isi pesan, dan (2) memastikan server benar-benar HiveMQ, dengan memeriksa sertifikatnya.
+**`setInsecure()`, sebuah trade-off yang disengaja.** TLS punya dua fungsi: (1) mengenkripsi isi pesan, dan (2) memastikan server benar-benar broker EMQX, dengan memeriksa sertifikatnya.
 - `setInsecure()` tetap menjalankan fungsi (1) tapi **melewati** fungsi (2). Kodenya pendek dan tidak rusak saat sertifikat server diperbarui.
 - Risikonya, secara teori pihak lain bisa menyamar sebagai server (*man-in-the-middle*). Untuk simulasi tugas, risiko ini dapat diterima.
 - Untuk produk nyata, sertifikat root CA perlu dipasang dengan `net.setCACert(...)`.
@@ -107,16 +107,20 @@ JSON disusun dengan `snprintf`, tanpa library ArduinoJson, karena payload-nya ke
 
 ---
 
-## 6. Panduan HiveMQ Cloud
+## 6. Panduan EMQX Serverless
 
-> Langkah ini berdasarkan pengetahuan saya tentang HiveMQ Cloud. **Nama menu bisa sedikit berbeda.**
+**Kenapa bukan HiveMQ Cloud?** Brief menyebut HiveMQ Cloud, tetapi per 2026 paket gratis HiveMQ Cloud (Serverless) **sudah tidak bisa dibuat oleh pengguna baru**. Yang tersisa hanya paket Starter (trial 15 hari, lalu sekitar $249/bulan) dan Enterprise. Karena itu dipakai **EMQX Serverless**, yang menurut halaman resminya **gratis selamanya tanpa kartu kredit**. Protokolnya tetap MQTT standar, jadi hanya alamat broker yang berubah; kode dan cara kerjanya sama. Alasan ini juga ditulis di laporan.
 
-1. Buka **console.hivemq.cloud** lalu daftar (Sign up). Login dengan Google bisa dipakai.
-2. Buat cluster baru dan pilih paket **Serverless / Free**.
-3. Buka detail cluster dan catat **URL cluster**, misalnya `abc123.s1.eu.hivemq.cloud`. Port TLS-nya **8883**.
-4. Buka menu **Access Management / Credentials** dan buat **username + password khusus proyek ini**, dengan izin *Publish and Subscribe*.
-   - Kenapa khusus proyek? Link Wokwi akan dibagikan di laporan, sehingga siapa pun yang membukanya bisa melihat `secrets.h`. Dengan user khusus, cukup **hapus user tersebut setelah penilaian** dan akun utama tetap aman.
-5. Isi `wokwi/secrets.h` (`MQTT_HOST`, `MQTT_USER`, `MQTT_PASS`) dan sel 2 notebook (`MQTT_HOST`, `MQTT_USER`).
+Kuota gratisnya 1 juta *session minutes* per bulan. Proyek ini memakai 2 koneksi (ESP32 dan dashboard): 2 × 60 × 24 × 30 = 86.400 menit per bulan walaupun menyala nonstop, jauh di bawah kuota.
+
+> Langkah berikut berdasarkan pengetahuan saya tentang EMQX Cloud. **Nama menu bisa sedikit berbeda.**
+
+1. Buka **cloud-intl.emqx.com** lalu daftar (Sign up).
+2. Buat deployment baru dan pilih paket **Serverless**. Atur **Spend Limit = 0**: jika kuota gratis habis, deployment berhenti, bukan ditagih.
+3. Buka halaman **Overview** deployment dan catat **Address**, misalnya `xxxxxxxx.ala.asia-southeast1.emqxsl.com`, dengan port **MQTT over TLS 8883**.
+4. Buka menu **Access Control → Authentication** dan tambahkan **username + password khusus proyek ini**.
+   - Kenapa khusus proyek? Link Wokwi akan dibagikan di laporan, sehingga siapa pun yang membukanya bisa melihat `secrets.h`. Dengan user khusus, cukup **hapus user tersebut setelah penilaian**.
+5. Salin `wokwi/secrets.example.h` menjadi `wokwi/secrets.h` (di Wokwi: buat file baru bernama `secrets.h`), isi `MQTT_HOST`, `MQTT_USER`, `MQTT_PASS`, lalu isi `MQTT_HOST` dan `MQTT_USER` di sel 2 notebook. File `secrets.h` sudah masuk `.gitignore`, jadi password tidak akan ikut ter-commit ke GitHub.
 
 ---
 
@@ -167,7 +171,7 @@ Tambahan opsional untuk menunjukkan stabilitas (bagian dari rubrik Debugging/Sta
 | `diagram.json` valid dan kabel AOUT → GPIO 34 ada | ✅ Lolos |
 | Kurung kurawal/kurung biasa di `sketch.ino` seimbang | ✅ Lolos (cek kasar, **bukan** kompilasi) |
 | Kompilasi `sketch.ino` | ❌ **Belum**, karena `arduino-cli` tidak tersedia. Akan terlihat saat klik Run di Wokwi |
-| Koneksi nyata ke HiveMQ Cloud | ❌ **Belum**, butuh kredensial tim |
+| Koneksi nyata ke broker EMQX Serverless | ❌ **Belum**, butuh kredensial tim |
 | Perilaku di simulasi Wokwi (TC1–TC5) | ❌ **Belum**, diisi tim |
 
 ---
@@ -195,7 +199,7 @@ Keterbatasan teknis lain: `setInsecure()` (bagian 3), publish memakai QoS 0 (pes
 | ≥1 sensor, ≥1 aktuator | ✅ | MQ-2, PIR, tombol / stepper, buzzer |
 | Wokwi sebagai simulasi | ✅ | `wokwi/` |
 | Serial Monitor | ✅ | Bagian 2 |
-| MQTT + HiveMQ Cloud | ✅ (kredensial diisi tim) | Bagian 3–6 |
+| MQTT + broker (EMQX Serverless, pengganti HiveMQ Cloud) | ✅ (kredensial diisi tim) | Bagian 3–6 |
 | Dashboard Python (paho-mqtt + Plotly) | ✅ | `dashboard/dashboard.ipynb` |
 | Topic dan payload konsisten | ✅ | Bagian 4 |
 | ≥3 skenario uji | ✅ (hasil diisi tim) | Bagian 8 |

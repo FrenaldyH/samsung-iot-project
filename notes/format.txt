@@ -1,0 +1,7 @@
+Kertas: A4.
+Margin: atas 4 cm, kiri 4 cm, bawah 3 cm, kanan 3 cm. Banyak kampus memakai variasi 3 cm di semua sisi.
+Font: Times New Roman. Tampilan PDF Anda memang tampak seperti Times New Roman.
+Ukuran font: 12 pt untuk isi. Judul bab 14 pt tebal kapital. Subbab 12 pt tebal.
+Spasi baris: 1,5 untuk isi. Daftar pustaka dan kutipan panjang 1,0.
+Paragraf: rata kiri-kanan dengan indentasi baris pertama sekitar 1 cm.
+Penomoran halaman: halaman awal (kata pengantar sampai daftar tabel) memakai angka Romawi kecil (i, ii, iii). Halaman isi mulai dari Bab I memakai angka Arab (1, 2, 3). Nomor ditaruh di bawah tengah atau kanan atas.

@@ -1,95 +1,123 @@
-// Libraries first: the pin #defines below are plain text substitution and must not leak into these headers
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
-#include "secrets.h"
 
-#define Step 32
-#define DIR 33
-#define MQ2 12
-#define PIR 0
-#define Reset 2
-#define Buzz 4
+// --- Pin Definitions ---
+#define Step 32   
+#define DIR 33   
+#define MQ2 12   
+#define PIR 0    
+#define Reset 2    
+#define Buzz 4    
 #define EN 25
-#define MQ2_AOUT 34
+
+// --- Network & Broker Configuration ---
+const char* ssid        = "Wokwi-GUEST";
+const char* password    = "";
+const char* mqtt_server = "broker.emqx.io";
+const int   mqtt_port   = 1883;
+
+// --- MQTT Topics Specification ---
+const char* topic_asap   = "tsabit/wokwi/status/asap";
+const char* topic_pir    = "tsabit/wokwi/status/pir";
+const char* topic_buzzer = "tsabit/wokwi/status/buzzer";
+const char* topic_motor  = "tsabit/wokwi/status/motor";
+const char* topic_button = "tsabit/wokwi/status/button";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+// --- Global Variables & State Tracking ---
 int count = 0;
-bool gas = 0;
-bool A = 0;
-bool butsig = 0;
+bool asap = HIGH;
+bool lastAsap = -1;
 
-// MQTT settings: one JSON status topic + one retained online/offline topic
-const char* TOPIC_STATUS = "sic8/frenaldy-gasleak/status";
-const char* TOPIC_AVAIL = "sic8/frenaldy-gasleak/availability";
-const unsigned long HEARTBEAT_MS = 2000;
-const unsigned long RETRY_MS = 5000;
+bool pirVal = LOW;
+bool lastPirVal = -1;
 
-WiFiClientSecure net;
-PubSubClient mqtt(net);
-char clientId[32];
-bool alarmOn = false;
-bool lastMotion = false;
-unsigned long lastBeat = 0;
-unsigned long lastRetry = 0;
+bool buzzVal = LOW;
+bool lastBuzzVal = -1;
 
-// Connect to WiFi, but give up after 10 s so the local alarm still works offline
-void connectWifi(){
-  Serial.print("[WIFI] Menghubungkan ke ");
-  Serial.println(WIFI_SSID);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000){
-    delay(250);
+bool butsig = LOW;
+bool lastButsig = -1;
+
+String motorStatus = "DIAM";
+String lastMotorStatus = "";
+
+unsigned long lastMqttSend = 0;
+
+void setup_wifi() {
+  delay(10);
+  Serial.println("\n[WiFi] Connecting to Wokwi-GUEST...");
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
   }
-  if (WiFi.status() == WL_CONNECTED){
-    Serial.println("[WIFI] Terhubung");
-  }else{
-    Serial.println("[WIFI] Gagal, sistem tetap jalan tanpa jaringan");
-  }
+  Serial.println("\n[WiFi] Connected!");
 }
 
-// Reconnect MQTT at most every RETRY_MS so a dead network never stalls the alarm
-void ensureMqtt(){
-  if (mqtt.connected() || WiFi.status() != WL_CONNECTED) return;
-  if (lastRetry != 0 && millis() - lastRetry < RETRY_MS) return;
-  lastRetry = millis();
-  // ponytail: each TLS connect attempt blocks ~1-3 s; move networking to its own FreeRTOS task if that matters
-  // Last Will: the broker publishes "offline" for us if the ESP32 disappears
-  // Empty credentials = anonymous login (public broker); NULL tells PubSubClient to skip them
-  const char* user = strlen(MQTT_USER) ? MQTT_USER : NULL;
-  const char* pass = strlen(MQTT_PASS) ? MQTT_PASS : NULL;
-  if (mqtt.connect(clientId, user, pass, TOPIC_AVAIL, 1, true, "offline")){
-    mqtt.publish(TOPIC_AVAIL, "online", true);
-    Serial.println("[MQTT] Terhubung ke broker");
-  }else{
-    Serial.print("[MQTT] Gagal terhubung, kode=");
-    Serial.println(mqtt.state());
+void reconnect() {
+  while (!client.connected()) {
+    Serial.print("[MQTT] Connecting to broker.emqx.io...");
+    String clientId = "ESP32-Wokwi-";
+    clientId += String(random(0xffff), HEX);
+    if (client.connect(clientId.c_str())) {
+      Serial.println(" CONNECTED!");
+    } else {
+      delay(5000);
+    }
   }
 }
 
-// Publish live sensor values + alarm state as JSON; skipped silently when offline
-void publishStatus(const char* event){
-  if (!mqtt.connected()) return;
-  char payload[160];
-  snprintf(payload, sizeof(payload),
-           "{\"gas\":%d,\"raw\":%d,\"motion\":%d,\"alarm\":%d,\"pos\":%d,\"event\":\"%s\"}",
-           digitalRead(MQ2) == LOW, analogRead(MQ2_AOUT), digitalRead(PIR) == HIGH,
-           alarmOn, count, event);
-  mqtt.publish(TOPIC_STATUS, payload);
-}
+void checkAndPublishAll() {
+  // 1. Asap (MQ2)
+  asap = digitalRead(MQ2);
+  if (asap != lastAsap) {
+    lastAsap = asap;
+    client.publish(topic_asap, (asap == LOW) ? "ADA_ASAP" : "AMAN");
+  }
 
-// Keep MQTT alive and send a heartbeat; called from loop() and from inside the alarm loop
-void netLoop(){
-  ensureMqtt();
-  mqtt.loop();
-  if (millis() - lastBeat >= HEARTBEAT_MS){
-    lastBeat = millis();
-    publishStatus("heartbeat");
+  // 2. PIR Sensor
+  pirVal = digitalRead(PIR);
+  if (pirVal != lastPirVal) {
+    lastPirVal = pirVal;
+    client.publish(topic_pir, (pirVal == HIGH) ? "GERAKAN_DETECTED" : "NORMAL");
+  }
+
+  // 3. Buzzer
+  if (buzzVal != lastBuzzVal) {
+    lastBuzzVal = buzzVal;
+    client.publish(topic_buzzer, (buzzVal == HIGH) ? "BUNYI" : "DIAM");
+  }
+
+  // 4. Tombol Reset
+  butsig = digitalRead(Reset);
+  if (butsig != lastButsig) {
+    lastButsig = butsig;
+    client.publish(topic_button, (butsig == HIGH) ? "PRESSED" : "RELEASED");
+  }
+
+  // 5. Motor Stepper
+  if (motorStatus != lastMotorStatus) {
+    lastMotorStatus = motorStatus;
+    client.publish(topic_motor, motorStatus.c_str());
   }
 }
 
-void setup(){
+void sendRutin() {
+  if (millis() - lastMqttSend > 1000) {
+    lastMqttSend = millis();
+    client.publish(topic_asap, (asap == LOW) ? "ADA_ASAP" : "AMAN");
+    client.publish(topic_pir, (pirVal == HIGH) ? "GERAKAN_DETECTED" : "NORMAL");
+    client.publish(topic_buzzer, (buzzVal == HIGH) ? "BUNYI" : "DIAM");
+    client.publish(topic_motor, motorStatus.c_str());
+    client.publish(topic_button, (butsig == HIGH) ? "PRESSED" : "RELEASED");
+  }
+}
+
+void setup() {
   Serial.begin(115200);
-  Serial.println("[BOOT] Sistem deteksi kebocoran gas");
 
   pinMode(Step, OUTPUT);
   pinMode(DIR, OUTPUT);
@@ -98,76 +126,80 @@ void setup(){
   pinMode(PIR, INPUT);
   pinMode(MQ2, INPUT);
   pinMode(EN, OUTPUT);
+  
+  digitalWrite(EN, HIGH);
+  digitalWrite(Buzz, LOW);
 
-  digitalWrite(EN,HIGH);
-  digitalWrite(Buzz,LOW);
-
-  // Network setup: TLS without certificate check (see notes/penjelasan-pengembangan.md)
-  snprintf(clientId, sizeof(clientId), "sic8-gasleak-%08lX", (unsigned long)ESP.getEfuseMac());
-  connectWifi();
-  net.setInsecure();
-  mqtt.setServer(MQTT_HOST, MQTT_PORT);
-  Serial.println("[SIAP] Memantau gas...");
+  setup_wifi();
+  client.setServer(mqtt_server, mqtt_port);
 }
 
-void loop(){
-  netLoop();
-  gas = digitalRead(MQ2);
-  butsig = digitalRead(Reset);
-  if (gas == LOW){
-    // Alarm latched: log + notify once when it starts
-    alarmOn = true;
-    Serial.print("[ALARM] Kebocoran gas terdeteksi, raw=");
-    Serial.println(analogRead(MQ2_AOUT));
-    publishStatus("alarm_start");
-    while (butsig == LOW){
-      netLoop();
-      digitalWrite(EN,HIGH);
+void loop() {
+  if (!client.connected()) reconnect();
+  client.loop();
+
+  checkAndPublishAll();
+  sendRutin();
+
+  // --- Logika Darurat Kebocoran Gas ---
+  if (asap == LOW) {
+    while (butsig == LOW) {
+      client.loop();
+      checkAndPublishAll();
+      sendRutin();
+
       butsig = digitalRead(Reset);
-      A = digitalRead(PIR);
-      if (A == HIGH){
+
+      if (pirVal == HIGH) {
         digitalWrite(Buzz, HIGH);
-      }else{
-        digitalWrite(Buzz,LOW);
+        buzzVal = HIGH;
+      } else {
+        digitalWrite(Buzz, LOW);
+        buzzVal = LOW;
       }
-      // Report only when the PIR state changes, not every iteration
-      if (A != lastMotion){
-        lastMotion = A;
-        Serial.println(A ? "[PIR] Ada orang, buzzer ON" : "[PIR] Tidak ada orang, buzzer OFF");
-        publishStatus(A ? "motion_on" : "motion_off");
-      }
-      while (count != 200){
-        digitalWrite(EN,LOW);
+
+      // Memutar Stepper Motor memutus Knob Regulator Winn Gas W-688 M (Posisi ON -> OFF)
+      if (count != 200) {
+        motorStatus = "BERPUTAR";
+        checkAndPublishAll();
+
+        digitalWrite(EN, LOW);
         digitalWrite(DIR, HIGH);
-        for (int i = 0; i<200; i++){
+        for (int i = 0; i < 200; i++) {
           digitalWrite(Step, HIGH);
           delayMicroseconds(1000);
           digitalWrite(Step, LOW);
           delayMicroseconds(1000);
           count += 1;
         }
-        // Motor reached the target position
-        Serial.println("[MOTOR] Sampai posisi 200 langkah");
-        publishStatus("motor_open");
+        digitalWrite(EN, HIGH);
       }
     }
+
+    // --- Eksekusi Tombol Reset (Memutar Balik Knob Regulator OFF -> ON) ---
+    motorStatus = "BERPUTAR";
+    buzzVal = LOW;
     digitalWrite(Buzz, LOW);
+    checkAndPublishAll();
+
     digitalWrite(EN, LOW);
     digitalWrite(DIR, LOW);
-    int Hitung = count;
-    for (int i = 0; i<Hitung; i++){
+    
+    for (int i = 0; i < 200; i++) {
       digitalWrite(Step, HIGH);
       delayMicroseconds(1000);
       digitalWrite(Step, LOW);
       delayMicroseconds(1000);
       count -= 1;
     }
-    digitalWrite(EN,HIGH);
-    // Reset finished: clear alarm state and notify
-    alarmOn = false;
-    lastMotion = false;
-    Serial.println("[RESET] Alarm dimatikan, motor kembali ke posisi 0");
-    publishStatus("reset");
-    delay (500);
+    
+    digitalWrite(EN, HIGH);
+    motorStatus = "DIAM";
+    checkAndPublishAll();
+    delay(500);
+  } else {
+    buzzVal = LOW;
+    digitalWrite(Buzz, LOW);
+    motorStatus = "DIAM";
   }
 }

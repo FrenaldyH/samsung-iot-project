@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>IoT LPG Safety Dashboard - Wokwi</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        h1 { margin-bottom: 20px; color: #f8fafc; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 900px; }
+        .card { padding: 20px; border-radius: 12px; text-align: center; background: #1e293b; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); }
+        .card h3 { margin-top: 0; color: #94a3b8; font-size: 13px; text-transform: uppercase; }
+        .status { font-size: 18px; font-weight: bold; margin-top: 10px; padding: 10px; border-radius: 8px; }
+        .safe { background-color: #15803d; color: #dcfce7; }
+        .danger { background-color: #b91c1c; color: #fee2e2; animation: pulse 1s infinite; }
+        .active { background-color: #1d4ed8; color: #dbeafe; }
+        .inactive { background-color: #334155; color: #94a3b8; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <h1>LPG Gas Leak & Safety Monitoring System</h1>
+    <div class="grid">
+        <div class="card"><h3>Sensor Gas (MQ2)</h3><div id="status-asap" class="status safe">AMAN</div></div>
+        <div class="card"><h3>Sensor Gerakan (PIR)</h3><div id="status-pir" class="status inactive">NORMAL</div></div>
+        <div class="card"><h3>Piezo Buzzer</h3><div id="status-buzzer" class="status inactive">DIAM</div></div>
+        <div class="card"><h3>Motor Pemutar Regulator</h3><div id="status-motor" class="status inactive">DIAM</div></div>
+        <div class="card"><h3>Tombol Reset</h3><div id="status-button" class="status inactive">RELEASED</div></div>
+    </div>
+
+    <script>
+        const client = new Paho.MQTT.Client("broker.emqx.io", 8084, "/mqtt", "web_dash_" + Math.random().toString(16).substr(2, 8));
+        client.onMessageArrived = function (message) {
+            const topic = message.destinationName;
+            const payload = message.payloadString;
+
+            if (topic === "tsabit/wokwi/status/asap") {
+                const el = document.getElementById("status-asap");
+                el.innerText = (payload === "ADA_ASAP") ? "ADA GAS/ASAP!" : "AMAN";
+                el.className = "status " + ((payload === "ADA_ASAP") ? "danger" : "safe");
+            }
+            if (topic === "tsabit/wokwi/status/pir") {
+                const el = document.getElementById("status-pir");
+                el.innerText = (payload === "GERAKAN_DETECTED") ? "GERAKAN!" : "NORMAL";
+                el.className = "status " + ((payload === "GERAKAN_DETECTED") ? "active" : "inactive");
+            }
+            if (topic === "tsabit/wokwi/status/buzzer") {
+                const el = document.getElementById("status-buzzer");
+                el.innerText = (payload === "BUNYI") ? "BUNYI" : "DIAM";
+                el.className = "status " + ((payload === "BUNYI") ? "danger" : "inactive");
+            }
+            if (topic === "tsabit/wokwi/status/motor") {
+                const el = document.getElementById("status-motor");
+                el.innerText = (payload === "BERPUTAR") ? "BERPUTAR" : "DIAM";
+                el.className = "status " + ((payload === "BERPUTAR") ? "active" : "inactive");
+            }
+            if (topic === "tsabit/wokwi/status/button") {
+                const el = document.getElementById("status-button");
+                el.innerText = (payload === "PRESSED") ? "PRESSED" : "RELEASED";
+                el.className = "status " + ((payload === "PRESSED") ? "active" : "inactive");
+            }
+        };
+        client.connect({ useSSL: true, onSuccess: function () { client.subscribe("tsabit/wokwi/#"); } });
+    </script>
+</body>
+</html>

@@ -1,65 +1,38 @@
 {
   "version": 1,
-  "author": "Nicholas",
+  "author": "Muhammad Sayyid Tsabit",
   "editor": "wokwi",
   "parts": [
-    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 33.64, "attrs": {} },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn1",
-      "top": -61,
-      "left": 57.6,
-      "attrs": { "color": "green", "xray": "1" }
-    },
-    { "type": "wokwi-a4988", "id": "drv1", "top": 43.2, "left": -139.2, "attrs": {} },
-    {
-      "type": "wokwi-stepper-motor",
-      "id": "stepper1",
-      "top": -149.99,
-      "left": -133.97,
-      "attrs": { "size": "17" }
-    },
-    { "type": "wokwi-gas-sensor", "id": "gas1", "top": 175.5, "left": -185, "attrs": {} },
-    {
-      "type": "wokwi-buzzer",
-      "id": "bz1",
-      "top": -55.2,
-      "left": 203.4,
-      "attrs": { "volume": "0.1" }
-    },
-    {
-      "type": "wokwi-pir-motion-sensor",
-      "id": "pir1",
-      "top": 184.12,
-      "left": 240.5,
-      "rotate": 90,
-      "attrs": {}
-    }
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-gas-sensor", "id": "mq2", "top": -140, "left": -200, "attrs": {} },
+    { "type": "wokwi-pir-motion-sensor", "id": "pir", "top": 100, "left": -200, "attrs": {} },
+    { "type": "wokwi-pushbutton", "id": "btn", "top": 250, "left": -200, "attrs": { "color": "red" } },
+    { "type": "wokwi-buzzer", "id": "buzz", "top": -140, "left": 220, "attrs": {} },
+    { "type": "wokwi-a4988", "id": "driver", "top": 40, "left": 220, "attrs": {} },
+    { "type": "wokwi-stepper-motor", "id": "stepper", "top": 180, "left": 220, "attrs": { "size": "17" } }
   ],
   "connections": [
-    [ "esp:TX", "$serialMonitor:RX", "", [] ],
-    [ "esp:RX", "$serialMonitor:TX", "", [] ],
-    [ "btn1:1.l", "esp:3V3", "red", [ "h0" ] ],
-    [ "drv1:VDD", "esp:5V", "red", [ "h67.35", "v86.48" ] ],
-    [ "esp:GND.1", "drv1:GND.1", "black", [ "h0" ] ],
-    [ "drv1:2B", "stepper1:A-", "green", [ "h0" ] ],
-    [ "drv1:2A", "stepper1:A+", "green", [ "h0" ] ],
-    [ "drv1:1A", "stepper1:B+", "green", [ "h0" ] ],
-    [ "drv1:1B", "stepper1:B-", "green", [ "h0" ] ],
-    [ "gas1:GND", "esp:GND.1", "black", [ "h48", "v-58.4" ] ],
-    [ "gas1:VCC", "esp:5V", "red", [ "h0" ] ],
-    [ "bz1:1", "esp:GND.2", "black", [ "v0" ] ],
-    [ "esp:4", "bz1:2", "green", [ "h0" ] ],
-    [ "esp:5V", "pir1:VCC", "red", [ "v48", "h144.15", "v-28.8" ] ],
-    [ "pir1:GND", "esp:GND.1", "black", [ "h-211.2", "v-115.46" ] ],
-    [ "esp:0", "pir1:OUT", "green", [ "h76.8", "v115.2" ] ],
-    [ "drv1:STEP", "esp:32", "green", [ "h-19.2", "v38.4", "h144", "v-57.6" ] ],
-    [ "drv1:DIR", "esp:33", "green", [ "h0", "v9.6", "h144", "v-28.8" ] ],
-    [ "drv1:ENABLE", "esp:25", "green", [ "v-9.6", "h163.2", "v67.2" ] ],
-    [ "gas1:DOUT", "esp:12", "green", [ "h19.2", "v-29.1", "h48", "v-28.8" ] ],
-    [ "btn1:2.l", "esp:2", "green", [ "v19.4", "h105.6", "v172.8" ] ],
-    [ "drv1:SLEEP", "drv1:RESET", "green", [ "h0" ] ],
-    [ "gas1:AOUT", "esp:34", "orange", [] ]
-  ],
-  "dependencies": {}
+    [ "esp:GND.1", "mq2:GND", "black", [ "v0" ] ],
+    [ "esp:3V3", "mq2:VCC", "red", [ "v0" ] ],
+    [ "esp:12", "mq2:A0", "green", [ "v0" ] ],
+
+    [ "esp:GND.1", "pir:GND", "black", [ "v0" ] ],
+    [ "esp:3V3", "pir:VCC", "red", [ "v0" ] ],
+    [ "esp:0", "pir:OUT", "purple", [ "v0" ] ],
+
+    [ "esp:GND.1", "btn:1.L", "black", [ "v0" ] ],
+    [ "esp:2", "btn:2.R", "orange", [ "v0" ] ],
+
+    [ "esp:GND.1", "buzz:1", "black", [ "v0" ] ],
+    [ "esp:4", "buzz:2", "red", [ "v0" ] ],
+
+    [ "esp:32", "driver:STEP", "blue", [ "v0" ] ],
+    [ "esp:33", "driver:DIR", "green", [ "v0" ] ],
+    [ "esp:25", "driver:ENABLE", "yellow", [ "v0" ] ],
+
+    [ "driver:1A", "stepper:A1", "blue", [ "v0" ] ],
+    [ "driver:1B", "stepper:A2", "red", [ "v0" ] ],
+    [ "driver:2A", "stepper:B1", "black", [ "v0" ] ],
+    [ "driver:2B", "stepper:B2", "green", [ "v0" ] ]
+  ]
 }

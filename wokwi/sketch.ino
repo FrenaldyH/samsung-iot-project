@@ -18,8 +18,8 @@ bool A = 0;
 bool butsig = 0;
 
 // MQTT settings: one JSON status topic + one retained online/offline topic
-const char* TOPIC_STATUS = "sic8/gasleak/status";
-const char* TOPIC_AVAIL = "sic8/gasleak/availability";
+const char* TOPIC_STATUS = "sic8/frenaldy-gasleak/status";
+const char* TOPIC_AVAIL = "sic8/frenaldy-gasleak/availability";
 const unsigned long HEARTBEAT_MS = 2000;
 const unsigned long RETRY_MS = 5000;
 
@@ -54,7 +54,10 @@ void ensureMqtt(){
   lastRetry = millis();
   // ponytail: each TLS connect attempt blocks ~1-3 s; move networking to its own FreeRTOS task if that matters
   // Last Will: the broker publishes "offline" for us if the ESP32 disappears
-  if (mqtt.connect(clientId, MQTT_USER, MQTT_PASS, TOPIC_AVAIL, 1, true, "offline")){
+  // Empty credentials = anonymous login (public broker); NULL tells PubSubClient to skip them
+  const char* user = strlen(MQTT_USER) ? MQTT_USER : NULL;
+  const char* pass = strlen(MQTT_PASS) ? MQTT_PASS : NULL;
+  if (mqtt.connect(clientId, user, pass, TOPIC_AVAIL, 1, true, "offline")){
     mqtt.publish(TOPIC_AVAIL, "online", true);
     Serial.println("[MQTT] Terhubung ke broker");
   }else{

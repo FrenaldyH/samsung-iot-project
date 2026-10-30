@@ -1,7 +1,7 @@
 # Penjelasan Pengembangan: Serial, MQTT, Dashboard, dan Pengujian
 
 > Lanjutan dari [pemahaman-proyek.md](pemahaman-proyek.md). Dokumen ini menjelaskan **apa yang ditambahkan, kenapa, dan cara menjalankannya**.
-> Simulasi Wokwi dan koneksi ke broker EMQX Serverless **belum pernah dijalankan** saat dokumen ini ditulis, karena butuh akun dan kredensial tim. Yang sudah diverifikasi dijelaskan di bagian 9.
+> Alur lengkap Wokwi → broker → dashboard **belum pernah dijalankan** saat dokumen ini ditulis; koneksi ke broker publik EMQX sendiri sudah diuji berhasil (bagian 6). Yang sudah diverifikasi dijelaskan di bagian 9.
 
 ---
 
@@ -10,7 +10,7 @@
 | File | Status | Isi perubahan |
 |---|---|---|
 | `wokwi/sketch.ino` | Diubah | + Serial, + WiFi, + MQTT, + baca AOUT. **Logika alarm tidak diubah.** |
-| `wokwi/secrets.h` | Baru | Tempat SSID, host, username, dan password (diisi tim) |
+| `wokwi/secrets.h` | Baru | Alamat broker publik dan port, tanpa username/password (ikut di-commit karena tidak berisi rahasia) |
 | `wokwi/libraries.txt` | Baru | Library `PubSubClient` untuk Wokwi |
 | `wokwi/diagram.json` | Diubah | + 1 kabel: `gas1:AOUT → esp:34` |
 | `dashboard/dashboard.ipynb` | Baru | Dashboard Google Colab (paho-mqtt + Plotly) |
@@ -18,7 +18,7 @@
 Prinsip yang dipegang selama pengembangan:
 1. **Logika alarm milik tim tidak diubah.** Kode baru hanya *disisipkan* (log, kirim data), tidak mengubah keputusan alarm.
 2. **Alarm lokal tidak boleh bergantung pada internet.** Jika WiFi atau broker mati, sensor, motor, dan buzzer tetap bekerja seperti biasa. Bagi alat keselamatan, jaringan hanyalah "pelapor", bukan "pengambil keputusan".
-3. **Rahasia dipisah dari kode.** Password ada di `secrets.h`, bukan di `sketch.ino`.
+3. **Konfigurasi dipisah dari kode.** Alamat broker ada di `secrets.h`, bukan di `sketch.ino`, sehingga mudah diganti ke broker pribadi kelak.
 
 ---
 
@@ -53,9 +53,9 @@ Arti `kode=` pada pesan MQTT gagal (dari library PubSubClient): `-2` berarti ser
 
 **MQTT** adalah cara perangkat IoT bertukar pesan, mirip grup WhatsApp. Pengirim (**publisher**) menaruh pesan di sebuah **topic** (nama grup), dan siapa pun yang **subscribe** ke topic itu menerimanya. Di proyek ini, ESP32 adalah publisher dan dashboard Colab adalah subscriber.
 
-**Broker** adalah perantara yang menerima dan meneruskan pesan. Broker diperlukan karena ESP32 dan laptop tidak bisa saling terhubung langsung lewat internet (terhalang router/firewall). Jadi keduanya sama-sama menghubungi broker dari sisi masing-masing. **EMQX Serverless** adalah broker yang sudah di-hosting dan gratis, jadi tim tidak perlu menyiapkan server sendiri (alasan tidak memakai HiveMQ Cloud ada di bagian 6).
+**Broker** adalah perantara yang menerima dan meneruskan pesan. Broker diperlukan karena ESP32 dan laptop tidak bisa saling terhubung langsung lewat internet (terhalang router/firewall). Jadi keduanya sama-sama menghubungi broker dari sisi masing-masing. **Broker publik EMQX** (`broker.emqx.io`) adalah broker yang sudah di-hosting, gratis, dan tanpa akun, jadi tim tidak perlu menyiapkan server sendiri (alasan tidak memakai HiveMQ Cloud ada di bagian 6).
 
-**TLS dan port 8883.** Port adalah "nomor pintu" di server. MQTT biasa memakai pintu 1883 dengan pesan terbuka (seperti HTTP). MQTT dengan **TLS** memakai pintu **8883**, dan pesannya dienkripsi (seperti HTTPS, gembok di browser). EMQX Serverless memakai TLS, jadi ESP32 memakai `WiFiClientSecure`, bukan `WiFiClient` biasa.
+**TLS dan port 8883.** Port adalah "nomor pintu" di server. MQTT biasa memakai pintu 1883 dengan pesan terbuka (seperti HTTP). MQTT dengan **TLS** memakai pintu **8883**, dan pesannya dienkripsi (seperti HTTPS, gembok di browser). Broker publik EMQX menyediakan TLS di port 8883, jadi ESP32 memakai `WiFiClientSecure`, bukan `WiFiClient` biasa.
 
 **`setInsecure()`, sebuah trade-off yang disengaja.** TLS punya dua fungsi: (1) mengenkripsi isi pesan, dan (2) memastikan server benar-benar broker EMQX, dengan memeriksa sertifikatnya.
 - `setInsecure()` tetap menjalankan fungsi (1) tapi **melewati** fungsi (2). Kodenya pendek dan tidak rusak saat sertifikat server diperbarui.
@@ -68,8 +68,8 @@ Arti `kode=` pada pesan MQTT gagal (dari library PubSubClient): `-2` berarti ser
 
 | Topic | Isi | Kapan dikirim | Retained |
 |---|---|---|---|
-| `sic8/gasleak/status` | JSON status (lihat bawah) | Setiap event + heartbeat tiap 2 detik | Tidak |
-| `sic8/gasleak/availability` | `online` / `offline` | `online` saat terhubung, `offline` otomatis oleh broker saat ESP32 hilang | Ya |
+| `sic8/frenaldy-gasleak/status` | JSON status (lihat bawah) | Setiap event + heartbeat tiap 2 detik | Tidak |
+| `sic8/frenaldy-gasleak/availability` | `online` / `offline` | `online` saat terhubung, `offline` otomatis oleh broker saat ESP32 hilang | Ya |
 
 Contoh payload status:
 ```json
@@ -107,20 +107,24 @@ JSON disusun dengan `snprintf`, tanpa library ArduinoJson, karena payload-nya ke
 
 ---
 
-## 6. Panduan EMQX Serverless
+## 6. Broker: broker publik EMQX (`broker.emqx.io`)
 
-**Kenapa bukan HiveMQ Cloud?** Brief menyebut HiveMQ Cloud, tetapi per 2026 paket gratis HiveMQ Cloud (Serverless) **sudah tidak bisa dibuat oleh pengguna baru**. Yang tersisa hanya paket Starter (trial 15 hari, lalu sekitar $249/bulan) dan Enterprise. Karena itu dipakai **EMQX Serverless**, yang menurut halaman resminya **gratis selamanya tanpa kartu kredit**. Protokolnya tetap MQTT standar, jadi hanya alamat broker yang berubah; kode dan cara kerjanya sama. Alasan ini juga ditulis di laporan.
+**Kenapa bukan HiveMQ Cloud?** Brief menyebut HiveMQ Cloud, tetapi per 2026 paket gratis HiveMQ Cloud (Serverless) **sudah tidak bisa dibuat oleh pengguna baru**. Yang tersisa hanya paket Starter (trial 15 hari, lalu sekitar $249/bulan) dan Enterprise. Karena itu dipakai **broker publik EMQX**: gratis, **tanpa akun dan tanpa password**, dan protokolnya tetap MQTT standar. Hanya alamat broker yang berubah; kode dan cara kerjanya sama. Alasan ini juga ditulis di laporan.
 
-Kuota gratisnya 1 juta *session minutes* per bulan. Proyek ini memakai 2 koneksi (ESP32 dan dashboard): 2 × 60 × 24 × 30 = 86.400 menit per bulan walaupun menyala nonstop, jauh di bawah kuota.
+**Kenapa broker publik, bukan deployment EMQX pribadi?** Tanpa password, **penguji bisa langsung menjalankan** Wokwi, Colab, dan MQTTX tanpa diberi kredensial apa pun, dan tidak ada risiko password bocor lewat link Wokwi.
 
-> Langkah berikut berdasarkan pengetahuan saya tentang EMQX Cloud. **Nama menu bisa sedikit berbeda.**
+| Pengaturan | Nilai |
+|---|---|
+| Host | `broker.emqx.io` |
+| Port ESP32 & Colab | `8883` (MQTT over TLS) |
+| Port MQTTX Web | `8084` (`wss://`, path `/mqtt`) |
+| Username / password | Kosong |
+| Awalan topic | `sic8/frenaldy-gasleak/` |
 
-1. Buka **cloud-intl.emqx.com** lalu daftar (Sign up).
-2. Buat deployment baru dan pilih paket **Serverless**. Atur **Spend Limit = 0**: jika kuota gratis habis, deployment berhenti, bukan ditagih.
-3. Buka halaman **Overview** deployment dan catat **Address**, misalnya `xxxxxxxx.ala.asia-southeast1.emqxsl.com`, dengan port **MQTT over TLS 8883**.
-4. Buka menu **Access Control → Authentication** dan tambahkan **username + password khusus proyek ini**.
-   - Kenapa khusus proyek? Link Wokwi akan dibagikan di laporan, sehingga siapa pun yang membukanya bisa melihat `secrets.h`. Dengan user khusus, cukup **hapus user tersebut setelah penilaian**.
-5. Salin `wokwi/secrets.example.h` menjadi `wokwi/secrets.h` (di Wokwi: buat file baru bernama `secrets.h`), isi `MQTT_HOST`, `MQTT_USER`, `MQTT_PASS`, lalu isi `MQTT_HOST` dan `MQTT_USER` di sel 2 notebook. File `secrets.h` sudah masuk `.gitignore`, jadi password tidak akan ikut ter-commit ke GitHub.
+Konsekuensi yang perlu dipahami:
+- **Publik:** siapa pun yang tahu topic bisa membaca datanya. Karena itu topic diberi awalan unik `sic8/frenaldy-gasleak/` supaya tidak tercampur dengan pengguna lain. Data proyek ini hanya simulasi, jadi ini dapat diterima.
+- **Tanpa jaminan uptime:** broker publik ditujukan untuk belajar dan menguji. Jika koneksi gagal saat demo, tunggu beberapa menit lalu coba lagi.
+- **Sudah diuji:** koneksi anonim lewat TLS port 8883 dan subscribe ke `sic8/frenaldy-gasleak/#` berhasil (diuji dengan paho-mqtt pada 2026-10-30).
 
 ---
 
@@ -129,7 +133,7 @@ Kuota gratisnya 1 juta *session minutes* per bulan. Proyek ini memakai 2 koneksi
 ### 7.1 Wokwi
 1. Buka project di **wokwi.com** (ESP32).
 2. Salin isi `sketch.ino` dan `diagram.json`.
-3. Tambah file baru `secrets.h` (menu tab file → *New file*), lalu salin isinya dan isi kredensial.
+3. Tambah file baru `secrets.h` (menu tab file → *New file*), lalu salin isi `wokwi/secrets.h` dari repo. Tidak ada yang perlu diisi.
 4. Pastikan library **PubSubClient** terpasang: lewat *Library Manager*, atau tambahkan file `libraries.txt`.
 5. Klik **Run** dan tunggu Serial Monitor menampilkan `[MQTT] Terhubung ke broker`.
 6. **Simpan project** dan salin link-nya. **Link ini wajib dimasukkan ke laporan** (deliverable brief).
@@ -138,9 +142,10 @@ Cara memicu kondisi di simulasi: klik sensor gas lalu geser nilai gas, klik sens
 
 ### 7.2 Dashboard (Google Colab)
 1. Buka **colab.research.google.com**, pilih *File → Upload notebook*, lalu pilih `dashboard/dashboard.ipynb`.
-2. Isi `MQTT_HOST` dan `MQTT_USER` di sel 2.
+2. Tidak ada yang perlu diisi: host dan topic sudah tertulis di sel 2.
 3. Jalankan sel 1 sampai 4. Saat sel 4 berjalan (60 detik), lakukan skenario uji di Wokwi.
 4. Jalankan sel 5. Muncul grafik kadar gas, tiga timeline status (gas/alarm/orang), dan tabel event.
+5. **Mode live (untuk demo):** setelah sel 1, 2, 3, dan 5 dijalankan, jalankan sel 6. Grafik dan 10 event terakhir diperbarui otomatis setiap 2 detik selama sel berjalan; tekan **Stop** untuk berhenti. Sel 4–5 tetap dipakai untuk screenshot laporan yang rapi, karena mode live menggambar ulang terus dan bisa sedikit berkedip.
 
 ---
 
@@ -171,7 +176,8 @@ Tambahan opsional untuk menunjukkan stabilitas (bagian dari rubrik Debugging/Sta
 | `diagram.json` valid dan kabel AOUT → GPIO 34 ada | ✅ Lolos |
 | Kurung kurawal/kurung biasa di `sketch.ino` seimbang | ✅ Lolos (cek kasar, **bukan** kompilasi) |
 | Kompilasi `sketch.ino` | ❌ **Belum**, karena `arduino-cli` tidak tersedia. Akan terlihat saat klik Run di Wokwi |
-| Koneksi nyata ke broker EMQX Serverless | ❌ **Belum**, butuh kredensial tim |
+| Koneksi anonim TLS 8883 + subscribe ke broker publik EMQX | ✅ Lolos (paho-mqtt, 2026-10-30) |
+| Alur lengkap Wokwi → broker → dashboard | ❌ **Belum**, diuji tim |
 | Perilaku di simulasi Wokwi (TC1–TC5) | ❌ **Belum**, diisi tim |
 
 ---
@@ -199,9 +205,9 @@ Keterbatasan teknis lain: `setInsecure()` (bagian 3), publish memakai QoS 0 (pes
 | ≥1 sensor, ≥1 aktuator | ✅ | MQ-2, PIR, tombol / stepper, buzzer |
 | Wokwi sebagai simulasi | ✅ | `wokwi/` |
 | Serial Monitor | ✅ | Bagian 2 |
-| MQTT + broker (EMQX Serverless, pengganti HiveMQ Cloud) | ✅ (kredensial diisi tim) | Bagian 3–6 |
+| MQTT + broker (broker publik EMQX, pengganti HiveMQ Cloud) | ✅ (tanpa password) | Bagian 3–6 |
 | Dashboard Python (paho-mqtt + Plotly) | ✅ | `dashboard/dashboard.ipynb` |
 | Topic dan payload konsisten | ✅ | Bagian 4 |
 | ≥3 skenario uji | ✅ (hasil diisi tim) | Bagian 8 |
-| Link project Wokwi | ⏳ **Tim**: simpan project lalu tempel link di sini → `[ISI LINK WOKWI]` | — |
+| Link project Wokwi | ✅ | https://wokwi.com/projects/479233145465564161 |
 | Laporan .docx, video .mp4, screenshot | ⏳ Tim | — |

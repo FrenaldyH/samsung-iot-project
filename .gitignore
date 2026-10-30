@@ -1,2 +1,1 @@
-# Real MQTT credentials: copy wokwi/secrets.example.h to wokwi/secrets.h and fill it in locally
-wokwi/secrets.h
+# wokwi/secrets.h is committed on purpose: the public broker (broker.emqx.io) needs no password.

@@ -188,7 +188,7 @@ Proyek masih di tahap ide dan laporan. Poin berikut **sengaja tidak diubah** dan
 
 - **Polaritas DOUT di Wokwi [belum dipastikan].** Kode memakai `LOW` = gas terdeteksi, sesuai modul MQ-2 asli. Belum dicek apakah sensor gas Wokwi berperilaku sama.
 - **Buzzer DC vs `tone()` [belum dipastikan].** Kode menyalakan buzzer dengan `digitalWrite(HIGH)`. Buzzer *aktif* berbunyi dengan sinyal DC, sedangkan buzzer *pasif* butuh gelombang (`tone()`). Jenis buzzer yang dipakai di Wokwi atau di produk nyata perlu dipastikan.
-- **`EN` mati saat alarm [maksud belum jelas].** Driver dimatikan di setiap putaran `while` alarm, sehingga motor tidak menahan posisinya. Jika stepper menahan katup, holding torque mungkin diperlukan.
+- **`EN` mati saat alarm [maksud belum jelas].** Driver dimatikan di setiap putaran `while` alarm, sehingga motor tidak menahan posisinya. Jika stepper harus menahan posisi tuas regulator, holding torque mungkin diperlukan.
 - **Strapping pin GPIO 0, 2, 12 [risiko hardware asli].** ESP32 membaca pin-pin ini saat menyala untuk menentukan mode boot. Contohnya, MQ-2 asli mengeluarkan `HIGH` saat tidak ada gas, sehingga GPIO 12 `HIGH` saat boot dan ESP32 bisa memilih tegangan flash yang salah lalu gagal boot. PIR di GPIO 0 yang `LOW` saat boot bisa membuat ESP32 masuk mode download. Di Wokwi hal ini tidak bermasalah.
 - **Level 5 V vs 3,3 V [risiko hardware asli].** DOUT dan AOUT modul MQ-2 yang diberi 5 V bisa mengeluarkan tegangan di atas 3,3 V, padahal pin ESP32 maksimal 3,3 V. Perlu level shifter atau pembagi tegangan.
 - **VMOT A4988.** Tidak wajib di Wokwi (konfirmasi tim), tapi di hardware asli VMOT adalah suplai daya motor yang wajib ada.

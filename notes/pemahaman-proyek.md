@@ -70,11 +70,13 @@ Aturan ini dipakai untuk **laporan .docx**. Brief meminta file .docx, jadi lapor
 
 Cara kerjanya:
 1. **Sensor gas (MQ-2)** terus memantau udara. Intinya hanya satu pertanyaan: *ada kebocoran gas atau tidak?* Untuk pertanyaan itu, output digital (DOUT) modul MQ-2 sudah cukup.
-2. Saat gas terdeteksi, **alarm terkunci** (*latching*) dan **motor stepper** bergerak 200 langkah.
-   - **[Dugaan]** Stepper mewakili aktuator mekanis, misalnya **menutup katup gas** atau membuka ventilasi. Fungsi pastinya tidak tertulis di file.
+2. Saat gas terdeteksi, **alarm terkunci** (*latching*) dan **motor stepper memutar tuas regulator LPG dari ON ke OFF**, sehingga aliran gas dari tabung terhenti dari sumbernya.
+   - **[Keputusan tim, 2026-10-30]** Fungsi ini diambil dari narasi K3 versi Tsabit (lihat [versi-teman-tsabit.md](versi-teman-tsabit.md)). Di simulasi, 200 langkah (1 putaran motor) merepresentasikan gerakan tuas ON ke OFF; rasio gir dan sudut tuas sebenarnya ditentukan saat prototipe fisik dibuat.
 3. Selama alarm aktif, **sensor PIR** mendeteksi apakah ada orang di dekatnya. Jika ada, **buzzer** berbunyi sebagai peringatan.
    - **[Dugaan]** Buzzer hanya bunyi saat ada orang, mungkin supaya peringatan ditujukan ke orang yang berada di lokasi (misalnya agar tidak menyalakan api).
-4. **Tombol reset** ditekan oleh petugas atau penghuni untuk mematikan alarm. Motor kembali ke posisi awal, dan sistem siap mendeteksi lagi.
+4. **Tombol reset** ditekan oleh petugas atau penghuni untuk mematikan alarm. Motor memutar tuas kembali ke posisi ON, dan sistem siap mendeteksi lagi.
+
+**Kenapa memutar tuas regulator, bukan mencabut selang? (prinsip K3)** Saat terjadi kebocoran, tindakan yang aman adalah menutup aliran gas dari sumbernya. Mencabut selang dari regulator saat tuas masih ON justru berbahaya, karena gas dari tabung keluar bebas ke ruangan. Memutar tuas ke OFF menghentikan aliran dari tabung. Penggerak dipasang di luar regulator (non-invasif), jadi bagian kedap gas regulator tidak perlu dibongkar. Regulator rumah tangga yang umum dipakai hanya punya tuas manual, sehingga aliran gas baru tertutup kalau ada orang yang memutarnya; sistem ini mengotomatiskan langkah tersebut.
 
 Kenapa alarm dibuat terkunci? Kebocoran gas berbahaya walau konsentrasinya turun sesaat, misalnya karena angin. Jika alarm otomatis mati saat sensor berhenti mendeteksi, kebocoran bisa luput. Dengan alarm terkunci, **manusia harus memastikan dulu** situasinya aman sebelum menekan reset. Ini pola yang umum di sistem keselamatan.
 
@@ -184,7 +186,7 @@ Untuk gerakan sependek 0,4 detik, blocking masih bisa diterima dan lebih mudah d
 
 ### 6.3 Sedang didiskusikan tim (tidak diubah)
 Proyek masih di tahap **ide dan laporan**, belum produk nyata, jadi poin berikut **hanya dicatat** untuk dipastikan nanti:
-- **[Pasti, maksudnya belum jelas]** `EN = HIGH` ditulis di awal setiap iterasi `while` alarm. Akibatnya, setelah motor sampai di posisi 200, driver langsung dimatikan dan motor kehilangan *holding torque* (bisa digeser dengan tangan). Ini bisa disengaja (hemat daya, motor tidak panas) atau tidak. Jika stepper benar-benar menahan katup, holding torque mungkin dibutuhkan.
+- **[Pasti, maksudnya belum jelas]** `EN = HIGH` ditulis di awal setiap iterasi `while` alarm. Akibatnya, setelah motor sampai di posisi 200, driver langsung dimatikan dan motor kehilangan *holding torque* (bisa digeser dengan tangan). Ini bisa disengaja (hemat daya, motor tidak panas) atau tidak. Jika stepper harus menahan posisi tuas regulator, holding torque mungkin dibutuhkan.
 - **[Belum dipastikan]** **Polaritas DOUT di Wokwi.** Kode memakai `LOW` = gas terdeteksi (sesuai modul asli), sedangkan versi kode sebelumnya mengasumsikan `HIGH` di Wokwi. Hanya simulasi yang bisa memastikan mana yang benar.
 - **[Belum dipastikan]** **Buzzer** dinyalakan dengan `digitalWrite(HIGH)` (DC), bukan `tone()` (gelombang kotak). Buzzer *pasif* butuh gelombang supaya berbunyi, sedangkan buzzer *aktif* cukup DC. Belum dicek apakah buzzer Wokwi berbunyi dengan DC.
 - **[Risiko hardware asli]** **Strapping pin ESP32**: GPIO 0, 2, dan 12 dibaca ESP32 saat boot untuk menentukan mode boot dan tegangan flash. Modul MQ-2 asli mengeluarkan `HIGH` saat tidak ada gas, sehingga GPIO 12 bisa `HIGH` saat boot. Pada banyak modul ESP32, kondisi ini memilih tegangan flash 1,8 V dan ESP32 gagal boot. GPIO 0 yang `LOW` saat boot juga bisa membuat ESP32 masuk mode download. Di Wokwi ini tidak bermasalah.
@@ -202,7 +204,7 @@ Proyek masih di tahap **ide dan laporan**, belum produk nyata, jadi poin berikut
 | PIR | Input / sensing | Deteksi keberadaan orang | GPIO 0 |
 | Push button | Input | Reset alarm | GPIO 2 |
 | ESP32 | Processing / logic | Keputusan alarm, kontrol motor & buzzer | — |
-| A4988 + NEMA 17 | Output / actuation | Gerak 200 langkah (penutup katup, dugaan) | 32, 33, 25 |
+| A4988 + NEMA 17 | Output / actuation | Memutar tuas regulator ON → OFF (200 langkah di simulasi) | 32, 33, 25 |
 | Buzzer | Output / indikator | Peringatan suara saat ada orang | GPIO 4 |
 
 ### Temuan vs status
